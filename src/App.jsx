@@ -13,14 +13,48 @@ import './App.css'
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnb_tSBK7JTyvJ6Z_uINUjdPuPW2JCi_IxOJm3_BkMdxbwUM0Ql_YpG7UK0hkVwD0UkGSAbo5phKrk/pub?gid=469446089&single=true&output=csv'
 // Example: 'https://docs.google.com/spreadsheets/d/1ABC.../pub?output=csv'
 
+// Parse URL hash for filter parameters
+// Supports: #filter:value or #search=x&institute=y&type=z&award=w
+function parseHashFilters() {
+  const hash = window.location.hash.slice(1) // Remove #
+  if (!hash) return {}
+  
+  // Support simple format: filter:value
+  if (hash.startsWith('filter:')) {
+    return { search: decodeURIComponent(hash.slice(7)) }
+  }
+  
+  // Support query-string format: search=x&institute=y
+  const params = new URLSearchParams(hash)
+  return {
+    search: params.get('search') || '',
+    type: params.get('type') || '',
+    institute: params.get('institute') || '',
+    award: params.get('award') || ''
+  }
+}
+
+// Build URL hash from filter state
+function buildHashFromFilters(search, type, institute, award) {
+  const params = new URLSearchParams()
+  if (search) params.set('search', search)
+  if (type) params.set('type', type)
+  if (institute) params.set('institute', institute)
+  if (award) params.set('award', award)
+  return params.toString()
+}
+
 function App() {
   const [papers, setPapers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
-  const [instituteFilter, setInstituteFilter] = useState('')
-  const [awardFilter, setAwardFilter] = useState('')
+  
+  // Initialize filters from URL hash
+  const initialFilters = parseHashFilters()
+  const [search, setSearch] = useState(initialFilters.search || '')
+  const [typeFilter, setTypeFilter] = useState(initialFilters.type || '')
+  const [instituteFilter, setInstituteFilter] = useState(initialFilters.institute || '')
+  const [awardFilter, setAwardFilter] = useState(initialFilters.award || '')
 
   useEffect(() => {
     async function loadData() {
@@ -48,6 +82,29 @@ function App() {
     }
 
     loadData()
+  }, [])
+
+  // Sync filter state to URL hash
+  useEffect(() => {
+    const hash = buildHashFromFilters(search, typeFilter, instituteFilter, awardFilter)
+    const newHash = hash ? `#${hash}` : ''
+    if (window.location.hash !== newHash) {
+      window.history.replaceState(null, '', newHash || window.location.pathname)
+    }
+  }, [search, typeFilter, instituteFilter, awardFilter])
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const filters = parseHashFilters()
+      setSearch(filters.search || '')
+      setTypeFilter(filters.type || '')
+      setInstituteFilter(filters.institute || '')
+      setAwardFilter(filters.award || '')
+    }
+    
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
   const types = useMemo(() => countBy(papers, p => p['Type']), [papers])
